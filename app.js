@@ -5,6 +5,20 @@ try { store = JSON.parse(sessionStorage.getItem('store')) || store; } catch (e) 
 const save = () => { try { sessionStorage.setItem('store', JSON.stringify(store)); } catch (e) {} };
 let category = 'Все', query = '';
 
+// A/B-тест оформления. A: как раньше; B: без имени, комментарий за ссылкой.
+// Вариант закрепляется за браузером. Для проверки: ?variant=a или ?variant=b
+const variant = (() => {
+  const forced = (new URLSearchParams(location.search).get('variant') || '').toUpperCase();
+  if (forced === 'A' || forced === 'B') return forced;
+  let v = null;
+  try { v = localStorage.getItem('ab_checkout'); } catch (e) {}
+  if (v !== 'A' && v !== 'B') {
+    v = Math.random() < 0.5 ? 'A' : 'B';
+    try { localStorage.setItem('ab_checkout', v); } catch (e) {}
+  }
+  return v;
+})();
+
 const count = () => Object.values(store.cart).reduce((a, b) => a + b, 0);
 const subtotal = () => Object.entries(store.cart).reduce((a, [id, n]) => a + dishes[id].price * n, 0);
 const cartRestaurant = () => { const id = Object.keys(store.cart)[0]; return id ? dishes[id].restaurant : null; };
@@ -42,16 +56,21 @@ function cart() {
 function checkout() {
   if (!count()) return location.replace('#/cart');
   const sum = subtotal() + DELIVERY;
+  const noteField = '<label>Комментарий курьеру<input name="note" autocomplete="off" placeholder="Этаж, домофон"></label>';
   app.innerHTML = head('#/cart', 'Оформление') + `<form id="order" class="amp-mask"><main>
-  <div class="card fields"><label>Адрес<input name="address" required autocomplete="off" placeholder="Можно вымышленный"></label><label>Имя<input name="name" required autocomplete="off" placeholder="Как к вам обращаться"></label><label>Комментарий курьеру<input name="note" autocomplete="off" placeholder="Этаж, домофон"></label></div>
+  <div class="card fields"><label>Адрес<input name="address" required autocomplete="off" placeholder="Можно вымышленный"></label>${variant === 'A'
+    ? `<label>Имя<input name="name" required autocomplete="off" placeholder="Как к вам обращаться"></label>${noteField}`
+    : '<button type="button" class="more">+ Комментарий курьеру</button>'}</div>
   <div class="card fields"><h2>Оплата</h2><label class="radio"><input type="radio" name="pay" value="card" checked>Карта (демо)</label><label class="radio"><input type="radio" name="pay" value="cash">Наличными курьеру</label><small>Учебный проект: деньги не списываются, настоящие данные не нужны.</small></div></main>
   <footer class="cta"><button type="submit"><span>Заказать</span><span>${sum} €</span></button></footer></form>`;
   const f = document.getElementById('order');
+  const more = f.querySelector('.more');
+  if (more) more.onclick = () => { more.outerHTML = noteField; f.elements.note.focus(); Analytics.track('comment_opened', { checkout_variant: variant }); };
   f.onsubmit = e => {
     e.preventDefault();
     const r = RESTAURANTS.find(x => x.id === cartRestaurant());
     store.order = { restaurant: r.name, time: r.time, sum };
-    Analytics.track('order_completed', { transaction_id: String(Date.now()), restaurant_id: r.id, items_count: count(), value: sum, currency: 'EUR', delivery_fee: DELIVERY, payment_method: new FormData(f).get('pay') });
+    Analytics.track('order_completed', { transaction_id: String(Date.now()), restaurant_id: r.id, items_count: count(), value: sum, currency: 'EUR', delivery_fee: DELIVERY, payment_method: new FormData(f).get('pay'), checkout_variant: variant });
     store.cart = {}; save(); location.hash = '#/done';
   };
 }
@@ -74,7 +93,7 @@ function trackView() {
   if (!page) Analytics.track('restaurant_list_viewed');
   else if (page === 'r') Analytics.track('restaurant_opened', { restaurant_id: id });
   else if (page === 'cart') Analytics.track('cart_viewed', { ...base, delivery_fee: DELIVERY });
-  else if (page === 'checkout' && count()) Analytics.track('checkout_started', base);
+  else if (page === 'checkout' && count()) Analytics.track('checkout_started', { ...base, checkout_variant: variant });
 }
 app.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;

@@ -7,7 +7,14 @@
 ## Воронка
 `app_opened` → `restaurant_list_viewed` → `restaurant_opened` → `item_added` → `cart_viewed` → `checkout_started` → `order_completed`
 
-Дополнительно: `item_removed`, `category_selected`, `search_used`.
+Дополнительно: `item_removed`, `category_selected`, `search_used`, `comment_opened`.
+
+## A/B-тест оформления
+Гипотеза: если убрать поле имени и спрятать комментарий, доля завершивших заказ вырастет, потому что заполнять станет быстрее.
+- A — адрес, имя, комментарий, оплата; B — адрес, ссылка на комментарий, оплата. Деление 50/50, вариант хранится в браузере.
+- Свойство `checkout_variant` у `checkout_started` и `order_completed`.
+- Метрика: уникальные с `order_completed` / уникальные с `checkout_started`.
+- Для проверки: `?variant=a` или `?variant=b` (такие заходы тоже попадают в статистику, если дано согласие на аналитику).
 
 ## Аналитика
 Идентификаторы Amplitude и GA4 задаются в `config.js`. Аналитика включается только после согласия посетителя. Имя, адрес и комментарий в события не передаются. С параметром `?debug` события выводятся в консоль.
